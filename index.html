@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Проверь свой слух!</title>
+    <style>
+        body { width: 768px; margin: 0 auto; }   
+        h1,h2 { text-align: center; }
+        p { font-size: x-large; text-align: justify; text-justify: inter-word; }
+        button { font-size: xx-large; padding: 10px 10px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1 id="main-header">Проверь свой слух!</h1>
+    <p>
+        Считается, что человек способен слышать звуки на частотах от 20 герц до 20 килогерц.
+        Нижний порог слышимости мало меняется с возрастом, в то время как верхний имеет тенденцию к уменьшению.
+        Данный тест попробует найти Вашу границу слышимости в диапазоне от <b id="f-lower">1</b> до <b id="f-upper">21</b> килогерц.
+    </p>
+    <!--p>
+        В силу особенностей звуковоспроизводящей аппаратуры, которая может плохо справляться с высокочастотными звуками,
+        найденная граница может оказаться ниже, чем Ваша настоящая граница.
+        Если найденное значение выше 15 килогерц, то, возможно, тест стоит повторить с использованием более высококачественной звуковой аппаратуры.
+        Но значимость этого аспекта еще не изучалась :)
+    </p-->
+    <p>
+        Тест состоит из <b id="n-count">5</b> испытаний, в каждом из которых будет воспроизведено от <b id="n-lower">3</b> до <b id="n-upper">5</b> сигналов, так что частота возрастает от сигнала к сигналу.
+        После каждого испытания система попросит Вас указать, сколько сигналов Вы услышали. Постепенно границы частотных интервалов будут сужаться, что позволит более точно определить границу слышимости.
+    </p>
+    <p style="text-align:center">
+        <b>ОСТОРОЖНО, БУДЕТ ГРОМКО!</b>
+    </p>
+    <p>
+        От этого теста в ушах может начать звенеть, как после рок-концерта вживую. Не увлекайтесь им чрезмерно! Если хочется перепройти тест, отдохните и сделайте это после перерыва.
+    </p>
+    <div style="display:flex;justify-content:center;">
+        <button id="btn-check" style="background-color:yellow" type="button" onclick="playExample();">ПРОВЕРИТЬ ЗВУК</button>
+    </div>
+    <p>
+        Готовы? Тогда поехали!
+    </p>
+    <div style="display:flex;justify-content:center;">
+        <button id="btn-test" style="background-color:green" type="button" onclick="nextTest();">НАЧАТЬ ТЕСТ</button>
+    </div>
+    <div id="test-responses" style="visibility:hidden;align-items:center;display:flex;justify-content:center;">
+        <div style="font-size:x-large">Сколько сигналов?&nbsp;&nbsp;</div>
+    </div>
+    <div id="results" style="visibility:hidden;font-size:xx-large">
+    </div>
+    <script>
+        const audioCtx = new AudioContext({ sampleRate: 48000 });
+        const minFreq = parseInt(document.getElementById("f-lower").innerText) * 1000;
+        const maxFreq = parseInt(document.getElementById("f-upper").innerText) * 1000;
+        const minTimes = parseInt(document.getElementById("n-lower").innerText);
+        const maxTimes = parseInt(document.getElementById("n-upper").innerText);
+        const testCount = parseInt(document.getElementById("n-count").innerText);
+        const timeStep = 1;
+        const beepTime = 0.3;
+        const attackTime = 0.02;
+
+        const responseButtons = [];
+        const responseDiv = document.getElementById("test-responses");
+        const testBtn = document.getElementById("btn-test");
+
+        function prepareButtons() {
+            for (time = 0; time <= maxTimes; ++time) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.innerText = "" + time;
+                const tm = time;
+                btn.onclick = function() {
+                    heardClick(tm);
+                };
+                responseDiv.appendChild(btn);
+                responseButtons[time] = btn;
+            }
+        }
+
+        function startPlaying(freqs) {
+            const startTime = audioCtx.currentTime;
+            const disconnectArray = [];
+            for (i = 0; i < freqs.length; ++i) {
+                const iTime = startTime + i * timeStep + (Math.random() - 0.5) * timeStep / 3 + 0.5;
+                const osc = new OscillatorNode(audioCtx, { frequency: freqs[i], type: "sine" });
+                const shape = new GainNode(audioCtx);
+                const shGain = shape.gain;
+                const amplitude = Math.sqrt(freqs[i] / maxFreq);
+                shGain.cancelScheduledValues(iTime);
+                shGain.setValueAtTime(0, iTime - 0.1);
+                shGain.linearRampToValueAtTime(0, iTime + 0.001);
+                shGain.linearRampToValueAtTime(amplitude, iTime + attackTime);
+                shGain.linearRampToValueAtTime(amplitude, iTime + beepTime - attackTime);
+                shGain.linearRampToValueAtTime(0, iTime + beepTime - 0.001);
+
+                osc.connect(shape).connect(audioCtx.destination);
+                osc.start(iTime);
+                osc.stop(iTime + beepTime);
+
+                disconnectArray[2 * i] = osc;
+                disconnectArray[2 * i + 1] = shape;
+            }
+
+            setTimeout(function() {
+                disconnectArray.forEach(e => e.disconnect());
+            }, freqs.length * timeStep * 1000);
+        }
+        
+        function playExample() {
+            const times = (Math.random() * (maxTimes - minTimes + 1) + minTimes) | 0;
+            const array = [];
+            const step = 200 + Math.random() * 100;
+            for (i = 0; i < times; ++i) {
+                array[i] = 1000 + step * i;
+            }
+            startPlaying(array);
+            const invokeBtn = document.getElementById("btn-check");
+            invokeBtn.disabled = true;
+            invokeBtn.style.background = "gray";
+            setTimeout(function() {
+                invokeBtn.disabled = false;
+                invokeBtn.style.background = "yellow";
+            }, maxTimes * timeStep * 1000);
+        }
+
+        var lastArray = [];
+        var lastTimes = 0;
+        var currMinFreq = minFreq;
+        var currMaxFreq = maxFreq;
+        var currAttempt = 1;
+        var isRepeating = false;
+
+        function heardClick(times) {
+            responseDiv.style.visibility = "hidden";
+            if (times > lastTimes) {
+                alert("Врёте вы всё! :)");
+            } else {
+                if (times == lastTimes) {
+                    currMinFreq = lastArray[lastTimes - 1];
+                    currMaxFreq = Math.min(currMaxFreq * 1.1, maxFreq);
+                } else if (times == 0) {
+                    // Shall not be that way really...
+                    currMinFreq = Math.max(currMinFreq * 0.9, minFreq);
+                } else {
+                    const maxListenedFreq = lastArray[times - 1];
+                    const minUnlistenedFreq = lastArray[times];
+                    currMinFreq = maxListenedFreq;
+                    currMaxFreq = minUnlistenedFreq;
+                }
+                ++currAttempt;
+            }
+            if (currAttempt > testCount) {
+                testBtn.innerText = "Спасибо!";
+                testBtn.disabled = true;
+                const resultDiv = document.getElementById("results");
+                const lowerRounded = (currMinFreq / 10) | 0;
+                const upperRounded = (currMaxFreq / 10) | 0;
+                resultDiv.innerText = "Ваша граница слышимости: " + (lowerRounded / 100) + ".." + (upperRounded / 100) + " кГц!";
+                resultDiv.style.visibility = "visible";
+            } else {
+                isRepeating = false;
+                testBtn.innerText = "Испытание №" + currAttempt;
+                testBtn.disabled = false;
+                testBtn.style.background = "green";
+            }
+        }
+
+        function nextTest() {
+            if (!isRepeating) {
+                lastArray = [];
+                lastTimes = (Math.random() * (maxTimes - minTimes + 1) + minTimes) | 0;
+                if (currAttempt == 1) {
+                    lastTimes = maxTimes;
+                }
+                var startIndex = 0;
+                if (false && currMinFreq > 2 * minFreq) {
+                    startIndex = 1
+                    lastTimes = Math.min(maxTimes, Math.max(lastTimes, minTimes + 1));
+                    lastArray[0] = Math.sqrt(minFreq * currMinFreq);
+                }
+                for (i = startIndex; i < lastTimes; ++i) {
+                    lastArray[i] = currMinFreq * Math.pow(currMaxFreq / currMinFreq, (i - startIndex) / (lastTimes - 1.0 - startIndex));
+                }
+            }
+            responseDiv.style.visibility = "hidden";
+            testBtn.disabled = true;
+            testBtn.style.background = "gray";
+            startPlaying(lastArray);
+            setTimeout(function() {
+                responseDiv.style.visibility = "visible";
+                testBtn.innerText = "Повторить?";
+                testBtn.disabled = false;
+                testBtn.style.background = "green";
+                isRepeating = true;
+            }, maxTimes * timeStep * 1000);
+        }
+
+        prepareButtons();
+    </script>
+</body>
+</html>
